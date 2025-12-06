@@ -1,13 +1,22 @@
 // Backend/routes/userRoutes.js
 const express = require("express");
 const router = express.Router();
-const { createUser } = require("../controllers/userControllers"); // Import logic xử lý
+const {
+  createUser,
+  getAllUsers,
+  getUserById,
+  updateUser,
+  deleteUser,
+} = require("../controllers/userControllers");
+const { authenticate, authorize } = require("../middleware/auth");
 
-// Route POST /api/users (để tạo người dùng mới)
-// Lưu ý: Chỉ cần '/', vì nó đã được gắn /api/users trong server.js
+// Public create (registration) or admin-create via same endpoint depending on auth
 router.post("/", createUser);
 
-// Ví dụ: Thêm route GET /api/users (để lấy tất cả người dùng)
-// Bạn cần tạo hàm getUsers trong controllers/userController.js
-// router.get("/", getUsers);
-module.exports = router; // <-- PHẢI CÓ DÒNG NÀY ĐỂ XUẤT ROUTER
+// Admin routes for user management
+router.get("/", authenticate, authorize("admin"), getAllUsers);
+router.get("/:id", authenticate, authorize("admin"), getUserById);
+router.put("/:id", authenticate, authorize("admin"), updateUser);
+router.delete("/:id", authenticate, authorize("admin"), deleteUser);
+
+module.exports = router;

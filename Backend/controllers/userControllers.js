@@ -1,56 +1,120 @@
 // Backend/controllers/userController.js
-const User = require('../models/User'); // Import Model User để thao tác với DB
+const User = require("../models/User");
 
-// @desc    Tạo một người dùng mới
+// @desc    Tạo một người dùng mới (admin hoặc public for registration)
 // @route   POST /api/users
-// @access  Public (có thể thêm auth sau)
+// @access  Public (admin-create uses admin middleware)
 const createUser = async (req, res) => {
   try {
-    // 1. Lấy dữ liệu từ body của request
-    const { name, email } = req.body;
+    const { name, email, password, role = "staff", phone, address } = req.body;
 
-    // 2. Kiểm tra dữ liệu đầu vào cơ bản
-    if (!name || !email) {
-      // Trả về lỗi 400 nếu thiếu trường bắt buộc
-      return res.status(400).json({ 
-        message: 'Vui lòng cung cấp cả Tên và Email.' 
-      });
+    if (!name || !email || !password) {
+      return res
+        .status(400)
+        .json({ message: "Vui lòng cung cấp tên, email và mật khẩu." });
     }
 
-    // 3. (Tùy chọn) Kiểm tra xem User đã tồn tại chưa (tránh trùng lặp trước khi Mongoose xử lý)
-    // Mongoose sẽ tự động kiểm tra do bạn đặt unique: true trong Model, nhưng kiểm tra thủ công có thể cho thông báo lỗi thân thiện hơn.
-    // const userExists = await User.findOne({ email });
-    // if (userExists) {
-    //     return res.status(400).json({ message: 'Email này đã tồn tại trong hệ thống.' });
-    // }
+    const userExists = await User.findOne({ email });
+    if (userExists)
+      return res.status(400).json({ message: "Email đã tồn tại" });
 
-    // 4. Tạo User mới trong MongoDB
     const newUser = await User.create({
       name,
       email,
+      password,
+      role,
+      phone,
+      address,
     });
 
-    // 5. Trả về kết quả thành công (201 Created)
-    res.status(201).json({
-      message: 'Người dùng đã được tạo thành công!',
-      data: newUser
-    });
-
+    res
+      .status(201)
+      .json({ message: "Người dùng đã được tạo thành công!", data: newUser });
   } catch (error) {
-    // Xử lý lỗi nếu việc tạo thất bại (Ví dụ: Lỗi trùng lặp email - code 11000)
-    
-    let message = 'Lỗi Server nội bộ.';
+    let message = "Lỗi Server nội bộ.";
     if (error.code === 11000) {
-        message = 'Email này đã được sử dụng (Lỗi trùng lặp).';
-        return res.status(400).json({ message });
+      message = "Email này đã được sử dụng (Lỗi trùng lặp).";
+      return res.status(400).json({ message });
     }
-    
-    console.error('Lỗi khi tạo User:', error);
+    console.error("Lỗi khi tạo User:", error);
     res.status(500).json({ message });
   }
 };
 
-// Xuất hàm để nó có thể được import và sử dụng trong routes/userRoutes.js
+// @desc Get all employees/users (admin)
+// @route GET /api/users
+// @access Admin
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find().select("-password").sort({ createdAt: -1 });
+    res.json({ value: users, count: users.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi khi lấy danh sách người dùng" });
+  }
+};
+
+// @desc Get single user
+// @route GET /api/users/:id
+// @access Admin
+const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user)
+      return res.status(404).json({ message: "Người dùng không tìm thấy" });
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi khi lấy người dùng" });
+  }
+};
+
+// @desc Update user
+// @route PUT /api/users/:id
+// @access Admin
+const updateUser = async (req, res) => {
+  try {
+    const { name, email, role, phone, address, status, password, avatar } =
+      req.body;
+    const update = { name, email, role, phone, address, status };
+    if (avatar) update.avatar = avatar;
+    // If password provided, set it (will be hashed by pre-save)
+    if (password) update.password = password;
+
+    const user = await User.findById(req.params.id);
+    if (!user)
+      return res.status(404).json({ message: "Người dùng không tìm thấy" });
+
+    Object.assign(user, update);
+    await user.save();
+    const out = user.toObject();
+    delete out.password;
+    res.json({ message: "Cập nhật thành công", user: out });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi khi cập nhật người dùng" });
+  }
+};
+
+// @desc Delete user
+// @route DELETE /api/users/:id
+// @access Admin
+const deleteUser = async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user)
+      return res.status(404).json({ message: "Người dùng không tìm thấy" });
+    res.json({ message: "Xóa người dùng thành công" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Lỗi khi xóa người dùng" });
+  }
+};
+
 module.exports = {
   createUser,
+  getAllUsers,
+  getUserById,
+  updateUser,
+  deleteUser,
 };
